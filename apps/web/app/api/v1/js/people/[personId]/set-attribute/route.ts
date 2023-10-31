@@ -1,8 +1,10 @@
 import { getUpdatedState } from "@/app/api/v1/js/sync/lib/sync";
 import { responses } from "@/app/lib/api/response";
 import { transformErrorToDetails } from "@/app/lib/api/validator";
-import { createAttributeClass, getAttributeClassByNameCached } from "@formbricks/lib/attributeClass/service";
+import { createAttributeClass, getAttributeClassByName } from "@formbricks/lib/attributeClass/service";
+import { personCache } from "@formbricks/lib/person/cache";
 import { getPerson, updatePersonAttribute } from "@formbricks/lib/person/service";
+import { surveyCache } from "@formbricks/lib/survey/cache";
 import { ZJsPeopleAttributeInput } from "@formbricks/types/js";
 import { NextResponse } from "next/server";
 
@@ -34,7 +36,7 @@ export async function POST(req: Request, { params }): Promise<NextResponse> {
       return responses.notFoundResponse("Person", personId, true);
     }
 
-    let attributeClass = await getAttributeClassByNameCached(environmentId, key);
+    let attributeClass = await getAttributeClassByName(environmentId, key);
 
     // create new attribute class if not found
     if (attributeClass === null) {
@@ -46,7 +48,16 @@ export async function POST(req: Request, { params }): Promise<NextResponse> {
     }
 
     // upsert attribute (update or create)
-    updatePersonAttribute(personId, attributeClass.id, value);
+    await updatePersonAttribute(personId, attributeClass.id, value);
+
+    personCache.revalidate({
+      id: personId,
+      environmentId,
+    });
+
+    surveyCache.revalidate({
+      environmentId,
+    });
 
     const state = await getUpdatedState(environmentId, personId, sessionId);
 
